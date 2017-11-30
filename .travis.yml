@@ -15,7 +15,7 @@ matrix:
     
 branches:
   only:
-    - developer
+    - master
    
 services:
   - mysql
@@ -36,9 +36,10 @@ before_script:
 - sudo mv ocular.phar /usr/local/bin/ocular
 - mysql -e "SET GLOBAL sql_mode = 'NO_ENGINE_SUBSTITUTION'"
 - mysql -e "create database IF NOT EXISTS yetiforce;" -uroot
-- cp tests/config.inc.txt config/config.inc.php
-- cp tests/debug.txt config/debug.php
-- cp tests/developer.txt config/developer.php
+- mkdir config/
+- mv tests/config.inc.txt config/
+- mv tests/debug.txt config/
+- mv tests/developer.txt config/
 - cp tests/.htaccess .htaccess
   
 script:
