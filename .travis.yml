@@ -37,9 +37,9 @@ before_script:
 - mysql -e "SET GLOBAL sql_mode = 'NO_ENGINE_SUBSTITUTION'"
 - mysql -e "create database IF NOT EXISTS yetiforce;" -uroot
 - mkdir config/
-- mv tests/config.inc.txt config/
-- mv tests/debug.txt config/
-- mv tests/developer.txt config/
+- mv tests/config.inc.txt config/config.inc.php
+- mv tests/debug.txt config/debug.php
+- mv tests/developer.txt config/developer.php
 - cp tests/.htaccess .htaccess
   
 script:
