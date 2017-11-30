@@ -12,5 +12,5 @@ $DEVELOPER_CONFIG = [
 	// Adding/Deleting relations between modules.
 	'CHANGE_RELATIONS' => true,
 	// Developer libraries update mode 
-	'MISSING_LIBRARY_DEV_MODE' => true,
+	'MISSING_LIBRARY_DEV_MODE' => false,
 ];
