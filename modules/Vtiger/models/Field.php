@@ -260,6 +260,8 @@ class Vtiger_Field_Model extends vtlib\Field
 						break;
 					case 309: $fieldDataType = 'categoryMultipicklist';
 						break;
+					case 500: $fieldDataType = 'documento';
+						break;
 					default:
 						$webserviceField = $this->getWebserviceFieldObject();
 						$fieldDataType = $webserviceField->getFieldDataType();
@@ -526,7 +528,7 @@ class Vtiger_Field_Model extends vtlib\Field
 	 */
 	public function isAjaxEditable()
 	{
-		$ajaxRestrictedFields = array('4', '72', '10', '300', '51', '59');
+		$ajaxRestrictedFields = array('4', '72', '10', '300', '51', '59','500');
 		if (!$this->isEditable() || in_array($this->get('uitype'), $ajaxRestrictedFields) || !$this->getUITypeModel()->isAjaxEditable() || (int) $this->get('displaytype') === 10) {
 			return false;
 		}
@@ -550,7 +552,7 @@ class Vtiger_Field_Model extends vtlib\Field
 	{
 		$moduleModel = $this->getModule();
 		$quickCreate = $this->get('quickcreate');
-		if (($quickCreate == self::QUICKCREATE_MANDATORY || $quickCreate == self::QUICKCREATE_ENABLED || $this->isMandatory()) && $this->get('uitype') != 69) {
+		if (($quickCreate == self::QUICKCREATE_MANDATORY || $quickCreate == self::QUICKCREATE_ENABLED || $this->isMandatory()) && $this->get('uitype') != 69 && $this->get('uitype') != 500) {
 			//isQuickCreateSupported will not be there for settings
 			if (method_exists($moduleModel, 'isQuickCreateSupported') && $moduleModel->isQuickCreateSupported()) {
 				return true;

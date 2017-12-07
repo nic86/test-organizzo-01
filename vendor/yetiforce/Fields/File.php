@@ -15,7 +15,7 @@ class File
 	 * Allowed formats
 	 * @var string[] 
 	 */
-	private static $allowedFormats = ['image' => ['jpeg', 'png', 'jpg', 'pjpeg', 'x-png', 'gif', 'bmp', 'x-ms-bmp']];
+	private static $allowedFormats = ['image' => ['vnd.dwg','jpeg', 'png', 'jpg', 'pjpeg', 'x-png', 'gif', 'bmp', 'x-ms-bmp']];
 
 	/**
 	 * Mime types
@@ -184,6 +184,16 @@ class File
 	}
 
 	/**
+	 * Get extension
+	 * @return string
+	 */
+	public function getNameWithoutExtension()
+	{
+		return pathinfo($this->name, PATHINFO_FILENAME);
+	}
+
+
+	/**
 	 * Validate whether the file is safe 
 	 * @param boolean|string $type
 	 * @return boolean
@@ -197,7 +207,7 @@ class File
 			$this->checkFile();
 			$this->validateFormat();
 			$this->validateCodeInjection();
-			if (($type && $type === 'image') || $this->getShortMimeType(0) === 'image') {
+			if (($type && $type === 'image') || ($type && $this->getShortMimeType(0) === 'image')) {
 				$this->validateImage();
 			}
 			if ($type && $this->getShortMimeType(0) != $type) {
