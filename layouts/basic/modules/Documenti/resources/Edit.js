@@ -6,7 +6,10 @@
  * Portions created by vtiger are Copyright (C) vtiger.
  * All Rights Reserved.
  *************************************************************************************/
-Vtiger_Edit_Js("Documenti_Edit_Js",{},{
+Vtiger_Edit_Js("Documenti_Edit_Js",{
+    validFile: false,
+    messageInvalidFile: false,
+},{
 
     /**
 	 * Function to check for Portal User
@@ -34,26 +37,17 @@ Vtiger_Edit_Js("Documenti_Edit_Js",{},{
             function (data) {
                 var result = data.result.success;
                 if (result) {
-                    return true;
+                    Documenti_Edit_Js.validFile = true;
                 } else {
-                    var params = {
-                        title: 'Attenzione',
-                        text: data.result.message
-                    };
-                    Vtiger_Helper_Js.showPnotify(params);
-                    return false;
+                    Documenti_Edit_Js.messageInvalidFile = data.result.message;
+                    Documenti_Edit_Js.validFile = false;
                 }
             },
             function (error, err) {
-                var params = {
-                    title: 'Attenzione',
-                    text: err
-                };
-                Vtiger_Helper_Js.showPnotify(params);
-                return false;
+                Documenti_Edit_Js.messageInvalidFile = data.result.message;
+                Documenti_Edit_Js.validFile = false;
             }
         );
-		return false;
 	},
      validateFilename: function (params) {
 		var aDeferred = jQuery.Deferred();
@@ -81,8 +75,26 @@ Vtiger_Edit_Js("Documenti_Edit_Js",{},{
 			form = this.getForm();
 		}
 
+		var element = form.find('[name="docfilename"]',form);
+		element.on('change', function (e) {
+            thisInstance.checkFilename(form);
+        });
+
 		form.on(Vtiger_Edit_Js.recordPreSave, function(e, data) {
-			return thisInstance.checkFilename(form);
+            var file = element[0].files[0];
+            var filename = false;
+            if (file){
+                filename = file.name;
+            }
+            if (filename && !Documenti_Edit_Js.validFile) {
+                var params = {
+                        title: 'Attenzione',
+                        text: Documenti_Edit_Js.messageInvalidFile
+                    };
+                Vtiger_Helper_Js.showPnotify(params);
+                return false;
+            }
+            return true;
 		});
 	},
 
