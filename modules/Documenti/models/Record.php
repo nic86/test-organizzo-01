@@ -10,6 +10,111 @@
 
 class Documenti_Record_Model extends Vtiger_Record_Model
 {
+	public function getDownloadFileURL()
+	{
+		return 'file.php?module=' . $this->getModuleName() . '&action=DownloadFile&record=' . $this->getId();
+	}
+
+	public function checkFileIntegrity()
+	{
+		$filePath = $this->get('docpath');
+		$fileName = $this->get('docfilename');
+
+		if (!empty($filePath) && !empty($fileName)) {
+			$savedFile = $filePath . DIRECTORY_SEPARATOR . $fileName;
+			if (is_readable($savedFile)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public function permissionDownload()
+	{
+		$inUso = $this->get('docinuso');
+		$share = $this->get('docshare');
+		$assignedUserId = $this->get('assigned_user_id');
+		$currentUserId = \App\User::getCurrentUserId();
+
+		/* if ($currentUserModel->isAdmin()) { */
+		/* 	return true; */
+		/* } */
+
+		if($assignedUserId == $currentUserId) {
+			return true;
+		} elseif ($inUso && $share) {
+			return true;
+		} elseif (!$inUso) {
+			return true;
+		}
+
+		return false;
+	}
+
+	public function getDownloadFileName()
+	{
+		$version = $this->get('docversione');
+		$fileName = $this->get('docfilename');
+		$id = $this->getId();
+		$md5Part = crc32("{$version}_{$id}");
+		return "{$md5Part}_{$fileName}";
+	}
+
+	public function validateUploadedFileName($uploadedFileName)
+	{
+		$version = $this->get('docversione');
+		$id = $this->getId();
+		list($file['md5'],$file['original_name']) = explode('_',$uploadedFileName,2);
+
+		$md5Part = crc32("{$version}_{$id}");
+
+		if($file['md5'] == $md5Part ) {
+			return true;
+		}
+
+		return false;
+	}
+
+	public function incrementVersion()
+	{
+		$id = $this->getId();
+	}
+
+	public function downloadFile()
+	{
+		if (!$this->checkFileIntegrity()) {
+			return false;
+		}
+
+		if (!$this->permissionDownload()) {
+			return false;
+		}
+
+		$filePath = $this->get('docpath');
+		$fileName = $this->get('docfilename');
+		$savedFile = $filePath . DIRECTORY_SEPARATOR . $fileName;
+		$fileSize = filesize($savedFile);
+		$fileSize = $fileSize + ($fileSize % 1024);
+
+		$fileContent = fread(fopen($savedFile, "r"), $fileSize);
+		if (!empty($fileContent)) {
+			$result = \App\Db::getInstance()->createCommand()->update(
+				'vtiger_documenti', [
+				'docinuso' => 1
+				], ['documentiid' => $this->getId()]
+			)->execute();
+
+			$downloadFileName = $this->getDownloadFileName();
+			header("Content-type: " . $this->get('type'));
+			header("Pragma: public");
+			header("Cache-Control: private");
+			header("Content-Disposition: attachment; filename=\"$downloadFileName\"");
+			header("Content-Description: PHP Generated Data");
+			echo $fileContent;
+		} else {
+			return false;
+		}
+	}
 
 	/**
 	 * Function to get Image Details
@@ -17,7 +122,6 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 	 */
 	public function getDocDetails()
 	{
-		$db = App\Db::getInstance();
 		$docDetails = [];
 		$recordId = $this->getId();
 
@@ -56,42 +160,55 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 	 */
 	public function saveToDb()
 	{
+		$this->addDocument();
 		parent::saveToDb();
-		$this->insertAttachment();
 	}
 
 	/**
 	 * This function is used to add the vtiger_attachments. This will call the function uploadAndSaveFile which will upload the attachment into the server and save that attachment information in the database.
 	 */
-	public function insertAttachment()
+	public function addDocument()
 	{
 		$id = $this->getId();
 		$moduleName = $this->getModuleName();
 
-		//Verifico se esiste gia` un documento allegato
-		$fileName = (new App\Db\Query())
-				->select(['vtiger_documenti.docfilename'])->from('vtiger_documenti')
-				->where(['vtiger_documenti.documentiid' => $id])->scalar();
-
+		if (!$this->isNew) {
+			$commessaPrec = $this->getPreviousValue('doccommessa');
+			if($commessaPrec !== false) {
+				unset($this->changes['doccommessa']);
+			}
+		}
 		if (isset($_FILES['docfilename'])) {
 			$file = $_FILES['docfilename'];
 
 			if (empty($file['tmp_name'])) {
+				unset($this->changes['docfilename']);
 				return false;
 			}
 			$fileInstance = \App\Fields\File::loadFromRequest($file);
 			if (!$fileInstance->validate()) {
+				unset($this->changes['docfilename']);
 				return false;
 			}
 
-			$commessa = !empty($this->get('doccommessa')) ? $this->get('doccommessa') : 'Condivisa';
+			$commessaId = $this->get('doccommessa');
+			if (!empty($commessaId)) {
+				$commessa = Vtiger_Record_Model::getInstanceById($commessaId, 'Commesse');
+				$commessaPath = $commessa->get('nome');
+			} else {
+				$commessaPath = 'Condivisa';
+			}
 			$configDocPath = !empty(AppConfig::module($moduleName, 'DOC_PATH')) ? AppConfig::module($moduleName, 'DOC_PATH') : 'storage/Documenti';
-			$uploadFilePath = ROOT_DIRECTORY . DIRECTORY_SEPARATOR . $configDocPath. DIRECTORY_SEPARATOR . $commessa;
+			$uploadFilePath = ROOT_DIRECTORY . DIRECTORY_SEPARATOR . $configDocPath. DIRECTORY_SEPARATOR . $commessaPath;
 			if (!is_dir($uploadFilePath)) { //create new folder
 				if(!mkdir($uploadFilePath, 0744, true)) {
+					unset($this->changes['docfilename']);
 					return false;
 				}
 			}
+
+			//Verifico se esiste gia` un documento allegato
+			$fileName = !empty($this->get('docfilename')) ? $this->get('docfilename') : false;
 
 			if (empty($fileName)) {
 				$fileName           = trim(App\Purifier::purify($fileInstance->name));
@@ -103,49 +220,44 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 				    $fileName           = "{$fileNameWithoutExt}_{$count}.{$extension}";
 				}
 				if ($fileInstance->moveFile($uploadFilePath . DIRECTORY_SEPARATOR. $fileName)) {
-					$db = \App\Db::getInstance();
-					$db->createCommand()->update('vtiger_documenti', [
-						'docnome' => $fileNameWithoutExt,
-						'docfilename' => $fileName,
-						'doctype' => $file['type'],
-						'docpath' => $uploadFilePath,
-						'docsize' => $file['size'],
-						'docinuso' => 0
-					], ['documentiid' => $id])->execute();
+					$this->set('docnome', $fileNameWithoutExt);
+					$this->set('docfilename', $fileName);
+					$this->set('doctype', $file['type']);
+					$this->set('docpath', $uploadFilePath);
+					$this->set('docsize', $file['size']);
+					$this->set('docinuso', 0);
+					$version = $this->get('docversione');
+					$version +=1;
+					$this->set('docversione',$version);
 				} else {
 					\App\Log::error('Error on the save attachment process.');
+					unset($this->changes['docfilename']);
 					return false;
 				}
 			} else {
+				if(!$this->validateUploadedFileName($fileInstance->name)) {
+					unset($this->changes['docfilename']);
+					return false;
+				}
 				if ($fileInstance->moveFile($uploadFilePath . DIRECTORY_SEPARATOR. $fileName)) {
-					$db = \App\Db::getInstance();
-					$db->createCommand()->update('vtiger_documenti', [
-						'docsize' => $file['size'],
-						'doctype' => $file['type'],
-						'docinuso' => 0
-					], ['documentiid' => $id])->execute();
-
+					$this->set('doctype', $file['type']);
+					$this->set('docsize', $file['size']);
+					$this->set('docinuso', 0);
+					$version = $this->get('docversione');
+					$version +=1;
+					$this->set('docversione',$version);
 				} else {
 					\App\Log::error('Error on the save attachment process.');
+					unset($this->changes['docfilename']);
 					return false;
 				}
 			}
 			return true;
+		} else {
+			unset($this->changes['docfilename']);
+			return false;
 		}
+
 	}
 
-	public function validateFileName($uploadedFilename)
-	{
-		$version = $this->get('version');
-		$filename = $this->get('filename');
-		$id = $this->getId();
-		$inUso = $this->get('docinuso');
-		/* list($file['version'],$file['id_record'],$file['original_name']) = explode('_',$fileName,3); */
-
-		$validFilename = "{$id}_{$filename}_{$version}";
-		if($uploadedFilename === $validFilename && $inUso) {
-			return true;
-		}
-		return false;
-	}
 }
