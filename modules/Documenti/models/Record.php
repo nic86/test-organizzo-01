@@ -235,7 +235,9 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 					return false;
 				}
 			} else {
-				if(!$this->validateUploadedFileName($fileInstance->name)) {
+				$arrmeta = stream_get_meta_data($uploadFilePath . DIRECTORY_SEPARATOR. $fileName);
+				$arrmeta2 = get_meta_tags($uploadFilePath . DIRECTORY_SEPARATOR. $fileName);
+				if(!$this->validateUploadedFileName($fileName)) {
 					unset($this->changes['docfilename']);
 					return false;
 				}

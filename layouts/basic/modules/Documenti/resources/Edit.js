@@ -83,10 +83,11 @@ Vtiger_Edit_Js("Documenti_Edit_Js",{
 		form.on(Vtiger_Edit_Js.recordPreSave, function(e, data) {
             var file = element[0].files[0];
             var filename = false;
+            var recordId = form.find('input[name="record"]').val();
             if (file){
                 filename = file.name;
             }
-            if (filename && !Documenti_Edit_Js.validFile) {
+            if (filename && !Documenti_Edit_Js.validFile && recordId != '') {
                 var params = {
                         title: 'Attenzione',
                         text: Documenti_Edit_Js.messageInvalidFile
