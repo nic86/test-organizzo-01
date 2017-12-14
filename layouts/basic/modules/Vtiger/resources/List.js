@@ -189,6 +189,15 @@ jQuery.Class("Vtiger_List_Js", {
 			listInstance.noRecordSelectedAlert();
 		}
 	},
+    triggerPrintTemplate: function (massActionUrl, module) {
+		var listInstance = Vtiger_List_Js.getInstance();
+		var validationResult = listInstance.checkListRecordSelected();
+		if (validationResult != true) {
+			Vtiger_List_Js.triggerMassAction(massActionUrl);
+		} else {
+			listInstance.noRecordSelectedAlert();
+		}
+	},
 	transferOwnershipSave: function (form) {
 		var listInstance = Vtiger_List_Js.getInstance();
 		var selectedIds = listInstance.readSelectedIds(true);

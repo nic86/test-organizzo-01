@@ -64,4 +64,6 @@ $PERFORMANCE_CONFIG = [
 	'SHOW_ADMINISTRATORS_IN_USERS_LIST' => true,
 	//Global search: true/false
 	'GLOBAL_SEARCH' => true,
+	//Excel template path
+	'EXCEL_TEMPLATE_PATH' => 'storage/Excel',
 ];

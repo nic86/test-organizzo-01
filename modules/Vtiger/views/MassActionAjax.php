@@ -18,6 +18,7 @@ class Vtiger_MassActionAjax_View extends Vtiger_IndexAjax_View
 		$this->exposeMethod('showAddCommentForm');
 		$this->exposeMethod('showSendSMSForm');
 		$this->exposeMethod('showDuplicatesSearchForm');
+		$this->exposeMethod('showTemplateExcel');
 		$this->exposeMethod('transferOwnership');
 	}
 
@@ -259,4 +260,65 @@ class Vtiger_MassActionAjax_View extends Vtiger_IndexAjax_View
 		$viewer->assign('USER_MODEL', Users_Record_Model::getCurrentUserModel());
 		$viewer->view('TransferRecordOwnership.tpl', $module);
 	}
+	
+	/**
+	 * Funzione che visualizza la lista dei template del modulo
+	 * @param Vtiger_Request $request
+	 */
+	public function showTemplateExcel(Vtiger_Request $request)
+	{
+		$moduleName = $request->getModule();
+		$selectedIds = $this->getRecordsListFromRequest($request);
+		$excludedIds = $request->get('excluded_ids');
+		$cvId = $request->get('viewname');
+		$viewer = $this->getViewer($request);
+		$user = Users_Record_Model::getCurrentUserModel();
+		
+		$excelTemplatePath = AppConfig::performance('EXCEL_TEMPLATE_PATH') . DIRECTORY_SEPARATOR . $request->getModule(false);
+		if (!is_dir($excelTemplatePath)) {
+			$viewer->assign('ERROR','Non sono disponibili modelli di stampa. Grazie');
+			echo $viewer->view('ShowTemplateExcel.tpl', $moduleName, true);
+			return;
+		}
+
+		$filesIterator = new FilesystemIterator($excelTemplatePath, FilesystemIterator::SKIP_DOTS);
+		if (iterator_count($filesIterator) == 0) {
+			$viewer->assign('ERROR','Non sono disponibili modelli di stampa. Grazie');
+			echo $viewer->view('ShowTemplateExcel.tpl', $moduleName, true);
+			return;
+		}
+
+		$templateExcel=[];
+		foreach ($filesIterator as $fileInfo) {
+			$extension = $fileInfo->getExtension();
+			$filename = $fileInfo->getFilename();
+			if ($extension === "xlsx" || $extension === "xls") {
+				$templateExcel[]=basename($filename,".{$extension}");
+			}
+		}
+
+		$viewer->assign('MODELLI_EXCEL', $templateExcel);
+		$viewer->assign('MODULE', $moduleName);
+		$viewer->assign('SELECTED_IDS', $selectedIds);
+		$viewer->assign('EXCLUDED_IDS', $excludedIds);
+		$viewer->assign('VIEWNAME', $cvId);
+		$viewer->assign('USER_MODEL', $user);
+
+		$searchKey = $request->get('search_key');
+		$searchValue = $request->get('search_value');
+		$operator = $request->get('operator');
+		if (!empty($operator)) {
+			$viewer->assign('OPERATOR', $operator);
+			$viewer->assign('ALPHABET_VALUE', $searchValue);
+			$viewer->assign('SEARCH_KEY', $searchKey);
+		}
+
+		$searchParams = $request->get('search_params');
+		if (!empty($searchParams)) {
+			$viewer->assign('SEARCH_PARAMS', $searchParams);
+		}
+
+		echo $viewer->view('ShowTemplateExcel.tpl', $moduleName, true);
+	}
+
 }

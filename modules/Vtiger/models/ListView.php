@@ -397,6 +397,15 @@ class Vtiger_ListView_Model extends Vtiger_Base_Model
 				'linkurl' => 'javascript:Vtiger_List_Js.triggerQuickExportToExcel("' . $moduleModel->getName() . '")',
 				'linkicon' => ''
 			];
+			if (is_dir(AppConfig::performance('EXCEL_TEMPLATE_PATH') . DIRECTORY_SEPARATOR . $moduleModel->getName())) {
+				$advancedLinks[] = [
+					'linktype' => 'LISTVIEWMASSACTION',
+					'linklabel' => 'Stampa da Modello',
+					'linkurl' => 'javascript:Vtiger_List_Js.triggerPrintTemplate("index.php?module=' . $moduleModel->getName() . '&view=MassActionAjax&mode=showTemplateExcel")',
+					/* 'linkurl' => 'javascript:Vtiger_List_Js.triggerQuickExportToTemplate("' . $moduleModel->getName() . '")', */
+					'linkicon' => ''
+				];
+			}
 		}
 		if ($moduleModel->isPermitted('RecordMappingList')) {
 			$handlerClass = Vtiger_Loader::getComponentClassName('Model', 'MappedFields', $moduleModel->getName());
