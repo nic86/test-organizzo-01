@@ -44,18 +44,22 @@
 					<input type="hidden" name="search_params" value='{\App\Json::encode($SEARCH_PARAMS)}' />
 
 					<div class="modal-body">
-						<div>
-							<span><strong>Lista modelli:</strong></span>
-						</div>
-						<select name="selectedFiles[]" data-placeholder="seleziona uno o più modelli di stampa" multiple class="chzn-select form-control" required="required">
-							<optgroup>
-								{foreach item=MODELLO from=$MODELLI_EXCEL}
-									<option value="{$MODELLO}">
-                                        {$MODELLO}
-									</option>
-								{/foreach}
-							</optgroup>
-						</select>
+                        <div class="form-group">
+                            <div class="col-sm-4 control-label">
+                                Lista modelli:
+                            </div>
+                            <div class="col-sm-6 controls">
+                                <select name="selectedFiles[]" data-placeholder="seleziona uno o più modelli di stampa" multiple class="chzn-select form-control" required="required">
+                                    <optgroup>
+                                        {foreach item=MODELLO from=$MODELLI_EXCEL}
+                                            <option value="{$MODELLO}">
+                                                {$MODELLO}
+                                            </option>
+                                        {/foreach}
+                                    </optgroup>
+                                </select>
+                            </div>
+                        </div>
                     </div>
 					<div class="modal-footer">
                         <button class="btn btn-success" type="submit" form="printTemplate" name="saveButton"><strong>Stampa</strong></button>

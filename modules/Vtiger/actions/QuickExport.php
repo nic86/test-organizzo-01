@@ -1,5 +1,17 @@
 <?php
 /* {[The file is published on the basis of YetiForce Public License that can be found in the following directory: licenses/License.html]} */
+require_once('libraries/PHPExcel/PHPExcel.php');
+
+class MyReadFilter implements PHPExcel_Reader_IReadFilter
+{
+	public function readCell($column, $row, $worksheetName = '') {
+		// Read title row and rows 20 - 30
+		if ($row == 1) {
+			return true;
+		}
+		return false;
+	}
+}
 
 class Vtiger_QuickExport_Action extends Vtiger_Mass_Action
 {
@@ -30,7 +42,7 @@ class Vtiger_QuickExport_Action extends Vtiger_Mass_Action
 	public function ExportToTemplate(Vtiger_Request $request)
 	{
 		$excelTemplatePath = AppConfig::performance('EXCEL_TEMPLATE_PATH') . DIRECTORY_SEPARATOR . $request->getModule(false);
-		$errorMessage = 'Ci scusiamo per il disagio ma non e` stato possibile generare il file excel che avete richiesto. Per maggiori informazioni contattare il servizio clienti di Simple Solutions. Grazie';
+		$errorMessage = 'Ci scusiamo per il disagio ma non e` stato possibile generare la stampa che avete richiesto, riprovare in un secondo momento. Se il problema persiste contattare il servizio clienti di Simple Solutions. Grazie';
 
 		if (!is_dir($excelTemplatePath)) {
 			throw new \Exception\AppException($errorMessage);
@@ -43,60 +55,56 @@ class Vtiger_QuickExport_Action extends Vtiger_Mass_Action
 			return;
 		}
 		$selectedFiles = $request->get('selectedFiles');
-		if(count($selectedFiles) < 1 || !is_array($selectedfiles)) {
-			/* throw new \Exception\AppException($errorMessage); */
+		if(count($selectedFiles) < 1 || !is_array($selectedFiles)) {
+			throw new \Exception\AppException($errorMessage);
 			return false;
 		}
 
-		vimport('libraries.PHPExcel.PHPExcel');
 		$module = $request->getModule(false); //this is the type of things in the current view
 		$recordIds = $this->getRecordsListFromRequest($request); //this handles the 'all' situation.
 
-		$excelFiles =[];
-		$tmpDir = AppConfig::main('tmp_dir');
+		$templateFiles =[];
 		foreach ($filesIterator as $fileInfo) {
-			$extension = $fileInfo->getExtension();
-			$pathname = $fileInfo->getPathname();
-			$filename = $fileInfo->getFilename();
+			$extension          = $fileInfo->getExtension();
+			$pathname           = $fileInfo->getPathname();
+			$filename           = $fileInfo->getFilename();
 			$filenameWithoutExt = basename($filename,".{$extension}");
-			if ($extension === "xlsx" || $extension === "xls" && in_array($filenameWithoutExt, $selectedFiles)) {
-				foreach ($recordIds as $id) {
-					$workbook = $this->setExcelTemplate($id,$module,$pathname);
+			if (($extension === "xlsx" || $extension === "xls") && in_array($filenameWithoutExt, $selectedFiles)) {
+				$objReader   = new PHPExcel_Reader_Excel2007();
+				$objReader->setReadFilter(new MyReadFilter());
+				$objPHPExcel = $objReader->load($pathname);
+				$objSheet    = $objPHPExcel->getSheet(0);
+				$workType    = !empty($objSheet->getCell('B1')->getValue()) ? $objSheet->getCell('B1')->getValue() : 'multiplo';
+				$activeSheet = !empty($objSheet->getCell('C1')->getValue()) ? $objSheet->getCell('C1')->getValue() : 0;
+				$writeType   = !empty($objSheet->getCell('D1')->getValue()) ? $objSheet->getCell('D1')->getValue() : 'excel';
+				$objPHPExcel->disconnectWorksheets();
+				unset($objPHPExcel);
 
-					$tempFileName = tempnam(ROOT_DIRECTORY . DIRECTORY_SEPARATOR . $tmpDir, 'xlsx');
-
-					/* $rendererName = PHPExcel_Settings::PDF_RENDERER_MPDF; */
-					/* $rendererLibraryPath = '/var/www/grenti/libraries/mPDF/'; */
-					/* if (!PHPExcel_Settings::setPdfRenderer( */
-					/* 		$rendererName, */
-					/* 		$rendererLibraryPath */
-					/* 	)) { */
-					/* 	die( */
-					/* 		'Please set the $rendererName and $rendererLibraryPath values' . */
-					/* 		PHP_EOL . */
-					/* 		' as appropriate for your directory structure' */
-					/* 	); */
-					/* } */
-					/* $workbookWriter = new PHPExcel_Writer_PDF($workbook); */
-					/* /1* $workbookWriter->writeAllSheets(); *1/ */
-					/* $objWriter->setPreCalculateFormulas(false); */
-					/* $workbookWriter->setSheetIndex(0); */
-					/* $workbookWriter->save($tempFileName); */
-
-					$workbookWriter = PHPExcel_IOFactory::createWriter($workbook, 'Excel2007');
-					$workbookWriter->save($tempFileName);
-					$workbook->disconnectWorksheets();
-					unset($workbook);
-					$filename = "{$module}_{$id}_{$filenameWithoutExt}.xlsx";
-					$excelFiles[$filename] = $tempFileName;
+				$name = "{$module}_{$id}_{$filenameWithoutExt}";
+				switch (strtolower($workType)) {
+					case 'singolo':
+						$workbook = $this->creaStampaDaModello($recordIds,$module,$pathname);
+						$templateFiles = array_merge($templateFiles, $this->saveWorkbook($workbook, $name, $writeType));
+						$workbook->disconnectWorksheets();
+						unset($workbook);
+						break;
+					case 'multiplo':
+					default:
+						foreach ($recordIds as $id) {
+							$workbook = $this->creaStampaDaModello([$id],$module,$pathname);
+							$templateFiles = array_merge($templateFiles, $this->saveWorkbook($workbook, $name, $writeType));
+							$workbook->disconnectWorksheets();
+							unset($workbook);
+						}
+						break;
 				}
 			}
 		}
 
-		if(count($excelFiles) > 1) {
-			$this->zipAndDownload($excelFiles);
-		} elseif (count($excelFiles) == 1) {
-			foreach ($excelFiles as $key => $value) {
+		if(count($templateFiles) > 1) {
+			$this->zipAndDownload($templateFiles);
+		} elseif (count($templateFiles) == 1) {
+			foreach ($templateFiles as $key => $value) {
 				if (isset($_SERVER['HTTP_USER_AGENT']) && strpos($_SERVER['HTTP_USER_AGENT'], 'MSIE')) {
 					header('Pragma: public');
 					header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
@@ -115,70 +123,177 @@ class Vtiger_QuickExport_Action extends Vtiger_Mass_Action
 		}
 	}
 
-	private function setExcelTemplate($id, $moduleName, $pathname)
-	{
-		$workbook = PHPExcel_IOFactory::load($pathname);
-		$loadedSheetNames = $workbook->getSheetNames();
 
-		$activeSheet = $workbook->getSheet(0)->getCell('A3')->getValue();
-		if (in_array($activeSheet, $loadedSheetNames)) {
-			$workbook->setActiveSheetIndexByName($activeSheet);
+	private function saveWorkbook($workbook, $name, $writeType) 
+	{
+		$tmpDir = AppConfig::main('tmp_dir');
+		switch (strtolower($writeType)) {
+			case 'pdf':
+				$tempFileName = tempnam(ROOT_DIRECTORY . DIRECTORY_SEPARATOR . $tmpDir, 'pdf');
+				$rendererName = PHPExcel_Settings::PDF_RENDERER_MPDF;
+				$rendererLibraryPath = '/var/www/grenti/libraries/mPDF/';
+				if (!PHPExcel_Settings::setPdfRenderer(
+						$rendererName,
+						$rendererLibraryPath
+					)) {
+					return false;
+				}
+				$workbookWriter = new PHPExcel_Writer_PDF($workbook);
+				/* $workbookWriter->writeAllSheets(); */
+				/* $workbookWriter->setPreCalculateFormulas(false); */
+				$workbookWriter->setSheetIndex(0);
+				$workbookWriter->save($tempFileName);
+				$newFilename = "{$name}.pdf";
+				break;
+			case 'excel':
+			default:
+				$tempFileName = tempnam(ROOT_DIRECTORY . DIRECTORY_SEPARATOR . $tmpDir, 'xlsx');
+				$workbookWriter = PHPExcel_IOFactory::createWriter($workbook, 'Excel2007');
+				$workbookWriter->save($tempFileName);
+				$newFilename = "{$name}.xlsx";
+				break;
 		}
 
+		return [$newFilename => $tempFileName];
+	}
+
+	private function creaStampaDaModello($ids, $moduleName, $pathname)
+	{
+		$workbook    = PHPExcel_IOFactory::load($pathname);
+		$loadedSheetNames = $workbook->getSheetNames();
+		$workbook->getActiveSheet()->setShowGridlines(false);
+
 		foreach ($loadedSheetNames as $sheet) {
-			$printArea = $workbook->getSheetByName($sheet)->getCell('A1')->getCalculatedValue();
+			$worksheet = $workbook->getSheetByName($sheet);
+			$printArea = $worksheet->getCell('A1')->getCalculatedValue();
 			if (strpos($printArea, ':') !== FALSE) {
-				$workbook->getSheetByName($sheet)->getPageSetup()->setPrintArea($printArea);
+				$worksheet->getPageSetup()->setPrintArea($printArea);
 			}
 		}
 
 		$validLocale = PHPExcel_Settings::setLocale('it');
 		if (!$validLocale) {
-			echo 'Unable to set locale to '.$locale." - reverting to en_us<br />\n";
 			die();
 		}
 
 		if (in_array($moduleName, $loadedSheetNames)) {
-			$worksheet   = $workbook->getSheetByName($moduleName);
-			$this->setWorksheetForModule($id, $moduleName, $worksheet);
+			$worksheet = $workbook->getSheetByName($moduleName);
+			$this->impostaCampiDelModello($ids, $moduleName, $worksheet);
 		}
+		$allRelationModel = Vtiger_Relation_Model::getAllRelations($moduleModel);
 
-		$recordModel = Vtiger_Record_Model::getInstanceById($id, $moduleName);
-		$moduleModel = Vtiger_Module_Model::getInstance($moduleName);
-		$headers = $moduleModel->getFields();
-		foreach ($headers as $fieldModel) {
-			$fieldName = $fieldModel->get('name');
-			if ($fieldModel->isReferenceField()) {
-				$relatedId = $recordModel->get($fieldName);
-				if(!empty($relatedId) && App\Record::isExists($relatedId)) {
-					$relatedRecordModel = Vtiger_Record_Model::getInstanceById($relatedId);
-					if (in_array($relatedRecordModel->getModuleName(), $loadedSheetNames)) {
-						$worksheet = $workbook->getSheetByName($relatedRecordModel->getModuleName());
-						$this->setWorksheetForModule($relatedId, $relatedRecordModel->getModuleName(), $worksheet);
+		$relatedIds= [];
+		foreach ($ids as $id) {
+			if(!empty($id) && App\Record::isExists($id)) {
+				//Estrazione record relazionati 1:M
+				$recordModel = Vtiger_Record_Model::getInstanceById($id, $moduleName);
+				$moduleModel = Vtiger_Module_Model::getInstance($moduleName);
+				$headers = $moduleModel->getFields();
+				foreach ($headers as $fieldModel) {
+					$fieldName = $fieldModel->get('name');
+					if ($fieldModel->isReferenceField()) {
+						$relatedId = $recordModel->get($fieldName);
+						if(!empty($relatedId) && App\Record::isExists($relatedId)) {
+							$relatedRecordModel = Vtiger_Record_Model::getInstanceById($relatedId);
+							if (in_array($relatedRecordModel->getModuleName(), $loadedSheetNames)) {
+								$relatedIds[$loadedSheetNames]['ids'] = $relatedId;
+								$relatedIds[$loadedSheetNames]['parentids'] = $id;
+							}
+						}
+					}
+				}
+
+				//Estrazione record relazionati M:M
+				foreach($allRelationModel as $relationModel) {
+					$relatedModuleName = $relationModel->getRelationModuleName();
+					if (in_array($relatedModuleName, $loadedSheetNames)) {
+						$recordModel = Vtiger_Record_Model::getInstanceById($id, $moduleName);
+						$relationListView  = Vtiger_RelationListView_Model::getInstance($recordModel, $relatedModuleName);
+						$relationIds          = $relationListView->getRelationQuery()->select(['vtiger_crmentity.crmid'])
+						->distinct()
+						->column();
+
+						if(count($relationIds)) {
+							foreach($relationIds as $relationId) {
+								if(!empty($relationId) && App\Record::isExists($relationId)) {
+									$relatedIds[$loadedSheetNames]['ids'] = $relationId;
+									$relatedIds[$loadedSheetNames]['parentids'] = $id;
+								}
+							}
+						}
 					}
 				}
 			}
 		}
 
-		$allRelationModel = Vtiger_Relation_Model::getAllRelations($moduleModel);
-		foreach($allRelationModel as $relationModel) {
-			$relatedModuleName = $relationModel->getRelationModuleName();
-			if (in_array($relatedModuleName, $loadedSheetNames)) {
-				$relationListView  = Vtiger_RelationListView_Model::getInstance($recordModel, $relatedModuleName);
-				$relationIds          = $relationListView->getRelationQuery()->select(['vtiger_crmentity.crmid'])
-				->distinct()
-				->column();
-
-				if(count($relationIds)) {
-					$worksheet = $workbook->getSheetByName($relatedModuleName);
-					$this->setWorksheetForModule($relationIds, $relatedModuleName, $worksheet);
-				}
-			}
+		foreach ($relatedIds as $module => $relatedId) {
+			$worksheet = $workbook->getSheetByName($module);
+			$this->impostaCampiDelModello($relatedIds[$module]['ids'], $module, $worksheet,$relatedIds[$module]['parentids']);
 		}
+
 		return $workbook;
 	}
 
-	private function setWorksheetForModule($ids, $module, &$worksheet)
+	/* private function creaStampaDaModelloMultiplo($id, $moduleName, $pathname) */
+	/* { */
+	/* 	$workbook    = PHPExcel_IOFactory::load($pathname); */
+	/* 	$loadedSheetNames = $workbook->getSheetNames(); */
+
+	/* 	foreach ($loadedSheetNames as $sheet) { */
+	/* 		$worksheet = $workbook->getSheetByName($sheet); */
+	/* 		$printArea = $worksheet->getCell('A1')->getCalculatedValue(); */
+	/* 		if (strpos($printArea, ':') !== FALSE) { */
+	/* 			$worksheet->getPageSetup()->setPrintArea($printArea); */
+	/* 		} */
+	/* 	} */
+
+	/* 	$validLocale = PHPExcel_Settings::setLocale('it'); */
+	/* 	if (!$validLocale) { */
+	/* 		echo 'Unable to set locale to '.$locale." - reverting to en_us<br />\n"; */
+	/* 		die(); */
+	/* 	} */
+
+	/* 	if (in_array($moduleName, $loadedSheetNames)) { */
+	/* 		$worksheet = $workbook->getSheetByName($moduleName); */
+	/* 		$this->impostaCampiDelModello($id, $moduleName, $worksheet); */
+	/* 	} */
+
+	/* 	$recordModel = Vtiger_Record_Model::getInstanceById($id, $moduleName); */
+	/* 	$moduleModel = Vtiger_Module_Model::getInstance($moduleName); */
+	/* 	$headers = $moduleModel->getFields(); */
+	/* 	foreach ($headers as $fieldModel) { */
+	/* 		$fieldName = $fieldModel->get('name'); */
+	/* 		if ($fieldModel->isReferenceField()) { */
+	/* 			$relatedId = $recordModel->get($fieldName); */
+	/* 			if(!empty($relatedId) && App\Record::isExists($relatedId)) { */
+	/* 				$relatedRecordModel = Vtiger_Record_Model::getInstanceById($relatedId); */
+	/* 				if (in_array($relatedRecordModel->getModuleName(), $loadedSheetNames)) { */
+	/* 					$worksheet = $workbook->getSheetByName($relatedRecordModel->getModuleName()); */
+	/* 					$this->impostaCampiDelModello($relatedId, $relatedRecordModel->getModuleName(), $worksheet); */
+	/* 				} */
+	/* 			} */
+	/* 		} */
+	/* 	} */
+
+	/* 	$allRelationModel = Vtiger_Relation_Model::getAllRelations($moduleModel); */
+	/* 	foreach($allRelationModel as $relationModel) { */
+	/* 		$relatedModuleName = $relationModel->getRelationModuleName(); */
+	/* 		if (in_array($relatedModuleName, $loadedSheetNames)) { */
+	/* 			$relationListView  = Vtiger_RelationListView_Model::getInstance($recordModel, $relatedModuleName); */
+	/* 			$relationIds          = $relationListView->getRelationQuery()->select(['vtiger_crmentity.crmid']) */
+	/* 			->distinct() */
+	/* 			->column(); */
+
+	/* 			if(count($relationIds)) { */
+	/* 				$worksheet = $workbook->getSheetByName($relatedModuleName); */
+	/* 				$this->impostaCampiDelModello($relationIds, $relatedModuleName, $worksheet); */
+	/* 			} */
+	/* 		} */
+	/* 	} */
+	/* 	return $workbook; */
+	/* } */
+
+	private function impostaCampiDelModello($ids, $module, &$worksheet, $idsRelated)
 	{
 		$moduleModel = Vtiger_Module_Model::getInstance($module);
 		$headers = $moduleModel->getFields();
@@ -189,7 +304,10 @@ class Vtiger_QuickExport_Action extends Vtiger_Mass_Action
 		$row = 1;
 		$col = 0;
 
-
+		if (!empty($idsRelated)) {
+			$worksheet->setCellValueExplicitByColumnAndRow($col, $row, 'parent_id', PHPExcel_Cell_DataType::TYPE_STRING);
+			$col++;
+		}
 		$worksheet->setCellValueExplicitByColumnAndRow($col, $row, 'id', PHPExcel_Cell_DataType::TYPE_STRING);
 		$col++;
 		foreach ($headers as $fieldsModel) {
@@ -211,6 +329,12 @@ class Vtiger_QuickExport_Action extends Vtiger_Mass_Action
 				continue;
 			}
 			$record = Vtiger_Record_Model::getInstanceById($id, $module);
+			if (!empty($idsRelated)) {
+				$idRel =!empty($idsRelated[$id]) ? $idsRelated[$id] : 0;
+				$worksheet->setCellvalueExplicitByColumnAndRow($col, $row, $idRel, PHPExcel_Cell_DataType::TYPE_STRING);
+				$col++;
+			}
+
 			$worksheet->setCellvalueExplicitByColumnAndRow($col, $row, $id, PHPExcel_Cell_DataType::TYPE_STRING);
 			$col++;
 			foreach ($headers as $fieldsModel) {
@@ -304,7 +428,6 @@ class Vtiger_QuickExport_Action extends Vtiger_Mass_Action
 
 	public function ExportToExcel(Vtiger_Request $request)
 	{
-		vimport('libraries.PHPExcel.PHPExcel');
 		$module = $request->getModule(false); //this is the type of things in the current view
 		$filter = $request->get('viewname'); //this is the cvid of the current custom filter
 		$recordIds = $this->getRecordsListFromRequest($request); //this handles the 'all' situation.
