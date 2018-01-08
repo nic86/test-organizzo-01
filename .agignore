@@ -1,0 +1,5 @@
+*.min.js
+*.min.css
+cache/*
+storage/*
+libraries/*

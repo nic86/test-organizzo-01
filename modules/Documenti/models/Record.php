@@ -53,22 +53,43 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 
 	public function getDownloadFileName()
 	{
-		$version = $this->get('docversione');
-		$fileName = $this->get('docfilename');
-		$id = $this->getId();
-		$md5Part = crc32("{$version}_{$id}");
-		return "{$md5Part}_{$fileName}";
+		$codiceId  = $this->get('doccodicefile');
+		if (!empty($codiceId)) {
+			$moduleName = \vtlib\Functions::getCRMRecordType($codiceId);
+			$moduleModel = Vtiger_Module_Model::getInstance($moduleName);
+			$codice = \vtlib\Functions::getSingleFieldValue($moduleModel->basetable, 'codice', $moduleModel->basetableid, $codiceId) . '-';
+		}
+
+		$tipoId  = $this->get('doctipofileelab');
+		if (!empty($tipoId)) {
+			$moduleName = \vtlib\Functions::getCRMRecordType($tipoId);
+			$moduleModel = Vtiger_Module_Model::getInstance($moduleName);
+			$tipo = \vtlib\Functions::getSingleFieldValue($moduleModel->basetable, 'tipo', $moduleModel->basetableid, $tipoId) . '-';
+		}
+
+		$contatore = !empty($this->get('doccontatore')) ? $this->get('doccontatore').'-' : '';
+		$release   = !empty($this->get('docrelease')) ? $this->get('docrelease').'-' : '';
+		$desc      = !empty($this->get('docnome')) ? $this->get('docnome').'-' : '';
+
+		$filename = $codice.$tipo.$contatore.$release.$desc;
+		if ($this->get('doccommstato') !== 'Consegnato') {
+			$version = $this->get('docversione');
+			$id = $this->getId();
+			$md5Part = crc32("{$version}_{$id}");
+			return "{$filename}_{$md5Part}";
+		}
+		return $filename;
 	}
 
 	public function validateUploadedFileName($uploadedFileName)
 	{
 		$version = $this->get('docversione');
 		$id = $this->getId();
-		list($file['md5'],$file['original_name']) = explode('_',$uploadedFileName,2);
+		$explodedFileName = explode('_',$uploadedFileName);
+		$md5File = end($explodedFileName);
+		$md5Check = crc32("{$version}_{$id}");
 
-		$md5Part = crc32("{$version}_{$id}");
-
-		if($file['md5'] == $md5Part ) {
+		if($md5File == $md5Check ) {
 			return true;
 		}
 
@@ -141,13 +162,21 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 		return $docDetails;
 	}
 
-	/**
-	 * The function decide about mandatory save record
-	 * @return type
-	 */
-	public function isMandatorySave()
+	public function isEditable()
 	{
-		return $_FILES ? true : false;
+		if ($this->get('doccommstato') === 'Consegnato') {
+			return false;
+		}
+		if (!isset($this->privileges['isEditable'])) {
+			$moduleName = $this->getModuleName();
+			$recordId = $this->getId();
+
+			$isPermitted = Users_Privileges_Model::isPermitted($moduleName, 'EditView', $recordId);
+			$checkLockEdit = Users_Privileges_Model::checkLockEdit($moduleName, $this);
+
+			$this->privileges['isEditable'] = $isPermitted && $this->checkLockFields() && $checkLockEdit === false;
+		}
+		return $this->privileges['isEditable'];
 	}
 
 	/**
@@ -156,9 +185,52 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 	public function saveToDb()
 	{
 		$this->addDocument();
+		$this->setContatore();
 		parent::saveToDb();
 	}
 
+
+	public function setContatore() 
+	{
+		$commessa  = $this->get('doccommessa');
+		$codice    = $this->get('doccodicefile');
+		$tipo      = $this->get('doctipofileelab');
+
+		if (empty($commessa)) {
+			return;
+		}
+		if (empty($codice)) {
+			return;
+		}
+		if (empty($tipo)) {
+			return;
+		}
+
+		$contatore     = $this->get('doccontatore');
+		$changedCodice = array_key_exists('doccodicefile', $this->changes);
+		$changedTipo   = array_key_exists('doctipofileelab', $this->changes);
+
+		if(empty($contatore) || $changedCodice || $changedTipo) {
+			$where = "`doccommessa` = '{$commessa}'";
+			$where .= "AND `doccodicefile` = '{$codice}'";
+			$where .= "AND `doctipofileelab` = '{$tipo}'";
+			$lastNumber  = $this->getLastNumber('doccontatore', $where);
+			$lastNumber +=1;
+			$this->set('doccontatore', $lastNumber);
+		}
+	}
+
+	public function getLastNumber($fieldName,$search)
+	{
+		$moduleModel = $this->getModule();
+		$maxSequence = (new \App\Db\Query())
+			->select($fieldName)
+			->from($moduleModel->basetable)
+			->where($search)
+			->max($fieldName);
+
+		return (int) $maxSequence;
+	}
 	/**
 	 * This function is used to add the vtiger_attachments. This will call the function uploadAndSaveFile which will upload the attachment into the server and save that attachment information in the database.
 	 */
