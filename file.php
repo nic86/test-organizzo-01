@@ -16,7 +16,7 @@ try {
 	$webUI->process(App\Request::init());
 } catch (Exception $e) {
 	\App\Log::error($e->getMessage() . ' => ' . $e->getFile() . ':' . $e->getLine());
-	//var_dump($e->getMessage());
+	/* var_dump($e->getMessage()); */
 	header('HTTP/1.1 400 Bad Request');
 }
 

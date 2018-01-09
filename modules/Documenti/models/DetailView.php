@@ -25,13 +25,22 @@ class Documenti_DetailView_Model extends Vtiger_DetailView_Model
 		$linkModelList = parent::getDetailViewLinks($linkParams);
 		$recordModel = $this->getRecord();
 
-		if ($recordModel->permissionDownload()) {
-			$basicActionLink = array(
+		if ($recordModel->permissionDownload() && $recordModel->checkFileIntegrity()) {
+			$basicActionLink = [
 				'linktype' => 'DETAILVIEW',
-				'linklabel' => 'LBL_DOWNLOAD_FILE',
+				'linklabel' => 'Scarica File',
 				'linkurl' => $recordModel->getDownloadFileURL(),
 				'linkicon' => 'glyphicon glyphicon-download-alt'
-			);
+			];
+			$linkModelList['DETAILVIEW'][] = Vtiger_Link_Model::getInstanceFromValues($basicActionLink);
+		}
+		if ($recordModel->permissionNewRelease() && $recordModel->checkFileIntegrity()) {
+			$basicActionLink = [
+				'linktype' => 'DETAILVIEW',
+				'linklabel' => 'Nuova Release',
+				'linkurl' => $recordModel->getNewReleaseURL(),
+				'linkicon' => 'glyphicon glyphicon-plus'
+			];
 			$linkModelList['DETAILVIEW'][] = Vtiger_Link_Model::getInstanceFromValues($basicActionLink);
 		}
 

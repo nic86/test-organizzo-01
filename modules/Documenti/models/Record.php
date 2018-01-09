@@ -14,6 +14,12 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 	{
 		return 'file.php?module=' . $this->getModuleName() . '&action=DownloadFile&record=' . $this->getId();
 	}
+	
+	public function getNewReleaseURL()
+	{
+		return 'index.php?module=' . $this->getModuleName() . '&action=NewRelease&record=' . $this->getId();
+	}
+
 
 	public function checkFileIntegrity()
 	{
@@ -29,22 +35,39 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 		return false;
 	}
 
+	public function permissionNewRelease()
+	{
+		$stato = $this->get('doccommstato');
+		if ($stato === 'Consegnato') {
+			return true;
+		}
+
+		return false;
+	}
+
+
 	public function permissionDownload()
 	{
-		$inUso = $this->get('docinuso');
+		$stato = $this->get('doccommstato');
+		if ($stato === 'Consegnato') {
+			return true;
+		}
+
 		$share = $this->get('docshare');
-		$assignedUserId = $this->get('assigned_user_id');
+		$permittedUserId = !empty($this->get('docutenteinuso')) ? $this->get('docutenteinuso') : false;
+		$assignedUserId = !empty($this->get('assigned_user_id')) ? $this->get('assigned_user_id') : false;
 		$currentUserId = \App\User::getCurrentUserId();
 
 		/* if ($currentUserModel->isAdmin()) { */
 		/* 	return true; */
 		/* } */
-
-		if($assignedUserId == $currentUserId) {
+		if(!$permittedUserId) {
 			return true;
-		} elseif ($inUso && $share) {
+		} elseif ($permittedUserId == $currentUserId) {
 			return true;
-		} elseif (!$inUso) {
+		} elseif ($assignedUserId == $currentUserId) {
+			return true;
+		} elseif ($permittedUserId && $share) {
 			return true;
 		}
 
@@ -54,17 +77,25 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 	public function getDownloadFileName()
 	{
 		$codiceId  = $this->get('doccodicefile');
+		$codice = '';
 		if (!empty($codiceId)) {
-			$moduleName = \vtlib\Functions::getCRMRecordType($codiceId);
+			$moduleName  = \vtlib\Functions::getCRMRecordType($codiceId);
 			$moduleModel = Vtiger_Module_Model::getInstance($moduleName);
-			$codice = \vtlib\Functions::getSingleFieldValue($moduleModel->basetable, 'codice', $moduleModel->basetableid, $codiceId) . '-';
+			$codice      = \vtlib\Functions::getSingleFieldValue($moduleModel->basetable, 'codfileelab', $moduleModel->basetableid, $codiceId);
+			if (!empty($codice)) {
+				$codice .= '-';
+			}
 		}
 
 		$tipoId  = $this->get('doctipofileelab');
+		$tipo = '';
 		if (!empty($tipoId)) {
-			$moduleName = \vtlib\Functions::getCRMRecordType($tipoId);
+			$moduleName  = \vtlib\Functions::getCRMRecordType($tipoId);
 			$moduleModel = Vtiger_Module_Model::getInstance($moduleName);
-			$tipo = \vtlib\Functions::getSingleFieldValue($moduleModel->basetable, 'tipo', $moduleModel->basetableid, $tipoId) . '-';
+			$tipo        = \vtlib\Functions::getSingleFieldValue($moduleModel->basetable, 'tipifileelabcodice', $moduleModel->basetableid, $tipoId);
+			if (!empty($tipo)) {
+				$tipo .= '-';
+			}
 		}
 
 		$contatore = !empty($this->get('doccontatore')) ? $this->get('doccontatore').'-' : '';
@@ -72,21 +103,26 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 		$desc      = !empty($this->get('docnome')) ? $this->get('docnome').'-' : '';
 
 		$filename = $codice.$tipo.$contatore.$release.$desc;
+		$filename = rtrim($filename, '-');
+		$extension = pathinfo($this->get('docfilename'), PATHINFO_EXTENSION);
+
 		if ($this->get('doccommstato') !== 'Consegnato') {
 			$version = $this->get('docversione');
 			$id = $this->getId();
 			$md5Part = crc32("{$version}_{$id}");
-			return "{$filename}_{$md5Part}";
+			return "{$filename}_{$md5Part}.{$extension}";
 		}
-		return $filename;
+		return "{$filename}.{$extension}";
 	}
 
 	public function validateUploadedFileName($uploadedFileName)
 	{
 		$version = $this->get('docversione');
 		$id = $this->getId();
-		$explodedFileName = explode('_',$uploadedFileName);
-		$md5File = end($explodedFileName);
+		$explodeFileName = explode('_',$uploadedFileName);
+		$lastValue = end($explodeFileName);
+		$explodeExtension = explode('.', $lastValue);
+		$md5File  = $explodeExtension[0];
 		$md5Check = crc32("{$version}_{$id}");
 
 		if($md5File == $md5Check ) {
@@ -99,11 +135,11 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 	public function downloadFile()
 	{
 		if (!$this->checkFileIntegrity()) {
-			return false;
+			throw new \Exception\NoPermitted('LBL_PERMISSION_DENIED');
 		}
 
 		if (!$this->permissionDownload()) {
-			return false;
+			throw new \Exception\NoPermitted('LBL_PERMISSION_DENIED');
 		}
 
 		$filePath = $this->get('docpath');
@@ -114,9 +150,10 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 
 		$fileContent = fread(fopen($savedFile, "r"), $fileSize);
 		if (!empty($fileContent)) {
+			$currentUserId = \App\User::getCurrentUserId();
 			$result = \App\Db::getInstance()->createCommand()->update(
 				'vtiger_documenti', [
-				'docinuso' => 1
+				'docutenteinuso' => $currentUserId
 				], ['documentiid' => $this->getId()]
 			)->execute();
 
@@ -184,9 +221,14 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 	 */
 	public function saveToDb()
 	{
-		$this->addDocument();
+		$this->setDocument();
 		$this->setContatore();
 		parent::saveToDb();
+	}
+
+	public function isMandatorySave()
+	{
+		return $_FILES ? true : false;
 	}
 
 
@@ -234,7 +276,7 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 	/**
 	 * This function is used to add the vtiger_attachments. This will call the function uploadAndSaveFile which will upload the attachment into the server and save that attachment information in the database.
 	 */
-	public function addDocument()
+	public function setDocument()
 	{
 		$id = $this->getId();
 		$moduleName = $this->getModuleName();
@@ -287,12 +329,13 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 				    $fileName           = "{$fileNameWithoutExt}_{$count}.{$extension}";
 				}
 				if ($fileInstance->moveFile($uploadFilePath . DIRECTORY_SEPARATOR. $fileName)) {
-					$this->set('docnome', $fileNameWithoutExt);
+					if(empty($this->get('docnome'))) {
+						$this->set('docnome', $fileNameWithoutExt);
+					}
 					$this->set('docfilename', $fileName);
 					$this->set('doctype', $file['type']);
 					$this->set('docpath', $uploadFilePath);
 					$this->set('docsize', $file['size']);
-					$this->set('docinuso', 0);
 					$version = $this->get('docversione');
 					$version +=1;
 					$this->set('docversione',$version);
@@ -302,14 +345,14 @@ class Documenti_Record_Model extends Vtiger_Record_Model
 					return false;
 				}
 			} else {
-				if(!$this->validateUploadedFileName($fileName)) {
+				if(!$this->validateUploadedFileName($fileInstance->name)) {
 					unset($this->changes['docfilename']);
 					return false;
 				}
 				if ($fileInstance->moveFile($uploadFilePath . DIRECTORY_SEPARATOR. $fileName)) {
 					$this->set('doctype', $file['type']);
 					$this->set('docsize', $file['size']);
-					$this->set('docinuso', 0);
+					$this->set('docutenteinuso', '');
 					$version = $this->get('docversione');
 					$version +=1;
 					$this->set('docversione',$version);
