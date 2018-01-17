@@ -366,6 +366,50 @@ class Vtiger_Record_Model extends Vtiger_Base_Model
 		return $displayableValues;
 	}
 
+	public function saveFiles()
+	{
+		$fields = $this->getModule()->getFieldsByUiType(500);
+		foreach($fields as $field) {
+			if (isset($_FILES[$field->name])) {
+				$file = $_FILES[$field->name];
+
+				if (empty($file['tmp_name'])) {
+					continue;
+				}
+				$fileInstance = \App\Fields\File::loadFromRequest($file);
+				if (!$fileInstance->validate()) {
+					continue;
+				}
+
+				$moduleName = $this->getModuleName();
+				$filePath = 'storage' . DIRECTORY_SEPARATOR .'Documenti'. DIRECTORY_SEPARATOR . $moduleName. DIRECTORY_SEPARATOR . $field->name;
+
+				if (!is_dir($filePath)) { //create new folder
+					if(!mkdir($filePath, 0744, true)) {
+						continue;
+					}
+				}
+
+				$fileName           = trim(App\Purifier::purify($fileInstance->name));
+				$fileNameWithoutExt = trim(App\Purifier::purify($fileInstance->getNameWithoutExtension()));
+				$extension          = pathinfo($fileName, PATHINFO_EXTENSION);
+				$count = 0;
+				while (file_exists($filePath . DIRECTORY_SEPARATOR. $fileName)) {
+					$count              = $count + 1;
+					$fileName           = "{$fileNameWithoutExt}_{$count}.{$extension}";
+				}
+
+				$fullFileName = $filePath . DIRECTORY_SEPARATOR . $fileName;
+				if ($fileInstance->moveFile(ROOT_DIRECTORY . DIRECTORY_SEPARATOR . $fullFileName)) {
+					$this->set($field->name, $fullFileName);
+				} else {
+					\App\Log::error('Error on the save document process.');
+					continue;
+				}
+			}
+		}
+	}
+
 	/**
 	 * Function to save the current Record Model
 	 */
@@ -376,6 +420,9 @@ class Vtiger_Record_Model extends Vtiger_Base_Model
 		$db->startTransaction();
 		if ($this->getModule()->isInventory()) {
 			$this->initInventoryData();
+		}
+		if ($this->getModuleName()!='Documents') {
+			$this->saveFiles();
 		}
 		$this->getModule()->saveRecord($this);
 		$db->completeTransaction();
@@ -622,6 +669,9 @@ class Vtiger_Record_Model extends Vtiger_Base_Model
 	public function isMandatorySave()
 	{
 		if ($this->getModule()->isInventory()) {
+			return true;
+		}
+		if (isset($_FILES)) {
 			return true;
 		}
 		return false;
