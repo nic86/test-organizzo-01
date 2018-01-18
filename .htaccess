@@ -54,3 +54,5 @@ RedirectMatch 403 (?i).*\.log$
 # AddHandler x-httpd-php56 .inc .php .php3 .php4 .php5 .php6 .phtml
 # </FilesMatch>
 php_flag  xdebug.remote_enable On
+php_value  xdebug.remote_port 9001
+php_value  xdebug.idekey nicola-xdebug

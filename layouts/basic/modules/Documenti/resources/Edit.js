@@ -98,8 +98,36 @@ Vtiger_Edit_Js("Documenti_Edit_Js",{
             return true;
 		});
 	},
+    quickCreateSave: function(form) {
+        var thisInstance = this;
+        var aDeferred = jQuery.Deferred();
+                    //Using formData object to send data to server as a multipart/form-data form submit
+        var formData = new FormData(form[0]);
+        var fileLocationTypeElement = form.find('[name="docfilename"]');
+                    if(typeof file != "undefined" && thisInstance.isFileLocationInternalType(fileLocationTypeElement)){
+                        formData.append("docfilename", file);
+                        delete file;
+                    }
+                    if (formData) {
+                        var params = {
+                                        url: "index.php",
+                                        type: "POST",
+                                        data: formData,
+                                        processData: false,
+                                        contentType: false
+                                     };
+             AppConnector.request(params).then(
+             function(data){
+                 aDeferred.resolve(data);
+             },
+             function(textStatus, errorThrown){
+                 aDeferred.reject(textStatus, errorThrown);
+            });
+        }
+        return aDeferred.promise();
+    },
 
-	registerBasicEvents : function(container){
+	registerEvents : function(container){
 		this._super(container);
 		this.registerRecordPreSaveEvent(container);
 	}
