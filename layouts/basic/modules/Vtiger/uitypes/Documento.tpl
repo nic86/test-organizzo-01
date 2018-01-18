@@ -13,7 +13,7 @@
 	{assign var="FIELD_INFO" value=Vtiger_Util_Helper::toSafeHTML(\App\Json::encode($FIELD_MODEL->getFieldInfo()))}
 	{assign var="SPECIAL_VALIDATOR" value=$FIELD_MODEL->getValidator()}
 	<input type="file" class="input-large" title="{vtranslate('LBL_SELECT_FILE')}" name="{$FIELD_MODEL->getFieldName()}" value="{$FIELD_MODEL->get('fieldvalue')}"
-		   data-validation-engine="validate[{if ($FIELD_MODEL->isMandatory() eq true) and (empty($DOC_DETAILS))} required,{/if}funcCall[Vtiger_Base_Validator_Js.invokeValidation]]"
+		   data-validation-engine="validate[{if ($FIELD_MODEL->isMandatory() eq true)} required,{/if}funcCall[Vtiger_Base_Validator_Js.invokeValidation]]"
 		   data-fieldinfo='{$FIELD_INFO}' {if !empty($SPECIAL_VALIDATOR)}data-validator={\App\Json::encode($SPECIAL_VALIDATOR)}{/if} />
-        <p>{$FIELD_MODEL->get('fieldvalue')}</p>
+        <p>{basename($FIELD_MODEL->get('fieldvalue'))}</p>
 {/strip}

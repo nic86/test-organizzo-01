@@ -366,12 +366,71 @@ class Vtiger_Record_Model extends Vtiger_Base_Model
 		return $displayableValues;
 	}
 
+	public function checkFileIntegrity($fieldName)
+	{
+		$filePath = $this->get($fieldName);
+
+		if (!empty($filePath)) {
+			$savedFile = ROOT_DIRECTORY . DIRECTORY_SEPARATOR . $filePath;
+			if (is_readable($savedFile)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public function permissionDownload($fieldName)
+	{
+		return true;
+	}
+
+	public function getDownloadFileName($fieldName)
+	{
+		$filename = basename($this->get($fieldName));
+		return $filename;
+	}
+
+	public function downloadFile($fieldName, $show = false)
+	{
+		if (!$this->checkFileIntegrity($fieldName)) {
+			throw new \Exception\NoPermitted('LBL_PERMISSION_DENIED');
+		}
+
+		if (!$this->permissionDownload($fieldName)) {
+			throw new \Exception\NoPermitted('LBL_PERMISSION_DENIED');
+		}
+
+		$filePath = $this->get($fieldName);
+		$savedFile = ROOT_DIRECTORY . DIRECTORY_SEPARATOR . $filePath;
+		$fileSize = filesize($savedFile);
+		$fileSize = $fileSize + ($fileSize % 1024);
+
+		$fileContent = fread(fopen($savedFile, "r"), $fileSize);
+		if (!empty($fileContent)) {
+			$currentUserId = \App\User::getCurrentUserId();
+			$downloadFileName = $this->getDownloadFileName($fieldName);
+			header("Content-type: " . \App\Fields\File::getMimeContentType($this->get($fieldName)));
+			header("Pragma: public");
+			header("Cache-Control: private");
+			if ($show) {
+				header('Content-Disposition: inline');
+			} else {
+				header("Content-Disposition: attachment; filename=\"$downloadFileName\"");
+			}
+			header("Content-Description: PHP Generated Data");
+			echo $fileContent;
+		} else {
+			throw new \Exception\NoPermitted('LBL_PERMISSION_DENIED');
+		}
+	}
+
 	public function saveFiles()
 	{
 		$fields = $this->getModule()->getFieldsByUiType(500);
 		foreach($fields as $field) {
-			if (isset($_FILES[$field->name])) {
-				$file = $_FILES[$field->name];
+			$fieldName = $field->name;
+			if (isset($_FILES[$fieldName])) {
+				$file = $_FILES[$fieldName];
 
 				if (empty($file['tmp_name'])) {
 					continue;
@@ -382,10 +441,10 @@ class Vtiger_Record_Model extends Vtiger_Base_Model
 				}
 
 				$moduleName = $this->getModuleName();
-				$filePath = 'storage' . DIRECTORY_SEPARATOR .'Documenti'. DIRECTORY_SEPARATOR . $moduleName. DIRECTORY_SEPARATOR . $field->name;
+				$filePath = 'storage' . DIRECTORY_SEPARATOR .'Documenti'. DIRECTORY_SEPARATOR . $moduleName. DIRECTORY_SEPARATOR . $fieldName;
 
 				if (!is_dir($filePath)) { //create new folder
-					if(!mkdir($filePath, 0744, true)) {
+					if(!mkdir($filePath, 0740, true)) {
 						continue;
 					}
 				}
@@ -399,9 +458,17 @@ class Vtiger_Record_Model extends Vtiger_Base_Model
 					$fileName           = "{$fileNameWithoutExt}_{$count}.{$extension}";
 				}
 
+				if (!empty($this->get($fieldName))) {
+					$oldFile = $this->get($fieldName);
+					if(file_exists(ROOT_DIRECTORY . DIRECTORY_SEPARATOR . $oldFile)){
+						chmod($oldFile, 0750);
+						unlink(ROOT_DIRECTORY . DIRECTORY_SEPARATOR . $oldFile);
+					}
+				}
+
 				$fullFileName = $filePath . DIRECTORY_SEPARATOR . $fileName;
 				if ($fileInstance->moveFile(ROOT_DIRECTORY . DIRECTORY_SEPARATOR . $fullFileName)) {
-					$this->set($field->name, $fullFileName);
+					$this->set($fieldName, $fullFileName);
 				} else {
 					\App\Log::error('Error on the save document process.');
 					continue;
@@ -409,6 +476,25 @@ class Vtiger_Record_Model extends Vtiger_Base_Model
 			}
 		}
 	}
+
+	public function deleteFiles()
+	{
+		$fields = $this->getModule()->getFieldsByUiType(500);
+		foreach($fields as $field) {
+			$fieldName = $field->name;
+			if (!empty($this->get($fieldName))) {
+				$oldFile = $this->get($fieldName);
+				if(file_exists(ROOT_DIRECTORY . DIRECTORY_SEPARATOR . $oldFile)){
+					chmod($oldFile, 0750);
+					unlink(ROOT_DIRECTORY . DIRECTORY_SEPARATOR . $oldFile);
+				} else {
+					\App\Log::error('Error on delete document process.');
+					continue;
+				}
+			}
+		}
+	}
+
 
 	/**
 	 * Function to save the current Record Model
@@ -421,9 +507,9 @@ class Vtiger_Record_Model extends Vtiger_Base_Model
 		if ($this->getModule()->isInventory()) {
 			$this->initInventoryData();
 		}
-		if ($this->getModuleName()!='Documents') {
-			$this->saveFiles();
-		}
+
+		$this->saveFiles();
+
 		$this->getModule()->saveRecord($this);
 		$db->completeTransaction();
 
