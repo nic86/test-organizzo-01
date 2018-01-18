@@ -407,7 +407,6 @@ class Vtiger_Record_Model extends Vtiger_Base_Model
 
 		$fileContent = fread(fopen($savedFile, "r"), $fileSize);
 		if (!empty($fileContent)) {
-			$currentUserId = \App\User::getCurrentUserId();
 			$downloadFileName = $this->getDownloadFileName($fieldName);
 			header("Content-type: " . \App\Fields\File::getMimeContentType($this->get($fieldName)));
 			header("Pragma: public");
