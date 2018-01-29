@@ -83,19 +83,33 @@ jQuery.Class("Vtiger_Header_Js", {
 	 * @param accepts form element as parameter
 	 * @return returns deferred promise
 	 */
-	quickCreateSave: function (form) {
-		var aDeferred = jQuery.Deferred();
-		var quickCreateSaveUrl = form.serializeFormData();
-		AppConnector.request(quickCreateSaveUrl).then(
-				function (data) {
-					aDeferred.resolve(data);
-				},
-				function (textStatus, errorThrown) {
-					aDeferred.reject(textStatus, errorThrown);
-				}
-		);
-		return aDeferred.promise();
-	},
+    quickCreateSave: function (form) {
+        var aDeferred = jQuery.Deferred();
+        var fileField = form.find('[type="file"]');
+        if (fileField.length > 0) {
+            var formData = new FormData(form[0]);
+            if (formData) {
+                var quickCreateSaveUrl = {
+                    url: "index.php",
+                    type: "POST",
+                    data: formData,
+                    processData: false,
+                    contentType: false
+                };
+            }
+        } else {
+            var quickCreateSaveUrl = form.serializeFormData();
+        }
+        AppConnector.request(quickCreateSaveUrl).then(
+                function (data) {
+                    aDeferred.resolve(data);
+                },
+                function (textStatus, errorThrown) {
+                    aDeferred.reject(textStatus, errorThrown);
+                }
+        );
+        return aDeferred.promise();
+    },
 	/**
 	 * Function to navigate from quickcreate to editView Fullform
 	 * @param accepts form element as parameter
