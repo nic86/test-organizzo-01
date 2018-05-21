@@ -434,6 +434,9 @@ class Vtiger_Record_Model extends Vtiger_Base_Model
 				if (empty($file['tmp_name'])) {
 					continue;
 				}
+				if (!is_uploaded_file($file['tmp_name'])) {
+    				continue;
+				}
 				$fileInstance = \App\Fields\File::loadFromRequest($file);
 				if (!$fileInstance->validate()) {
 					continue;
@@ -446,6 +449,7 @@ class Vtiger_Record_Model extends Vtiger_Base_Model
 					if(!mkdir($filePath, 0740, true)) {
 						continue;
 					}
+					chmod($filePath, 0770);
 				}
 
 				$fileName           = trim(App\Purifier::purify($fileInstance->name));
